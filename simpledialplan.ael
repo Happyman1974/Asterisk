@@ -1,0 +1,366 @@
+globals {
+	MACRO_RECURSION=20;
+    AMPDBHOST=localhost;
+    AMPDBUSER=asterisk;
+    AMPDBPASS=ast2ast;
+    AMPDBNAME=asterisk;
+	TRUNK_OPTIONS=TtL(3600000:40000:20000);
+	TRUNK_RING_TIMER=60;
+}
+
+#include "ivr.ael"
+#include "extensions_Perm.ael"
+
+context default {
+    9998887 => {
+	Dial(SIP/9998887,60,rt);
+	Hangup();
+	};
+};
+
+context from-rostov {	
+    includes {
+		commonc;
+	};
+}
+
+context from-aster05 {
+ _11XXX => {			//Test
+	AGI(uuid.php);
+	Noop(CallUUID = ${CallUUID});
+	&dialstatus();
+	};
+ _84952300303 => {			//EFSOL
+	&special-record();
+	Dial(SIP/ttk-samara/${EXTEN},60,r);
+	&dialstatus();
+	};	
+}
+context from-aster01 {
+ _12222 => {			//Test
+//	AGI(uuid.php,${var1});
+	AGI(uuid.php);
+	Noop(CallUUID = ${CallUUID});
+
+	&dialstatus();
+	};
+ _121XX => {			//Kirov
+	&special-record();
+	Dial(SIP/${EXTEN},60,rt);
+	&dialstatus();
+	};
+ _13XXX => {			//Samara
+	&special-record();
+	Dial(SIP/${EXTEN},60,rt);
+	&dialstatus();
+	};
+ _15XXX => {			//Peter
+	&special-record();
+	AGI(uuid.php);
+	Noop(CallUUID = ${CallUUID});
+	SIPAddHeader(x-acc: ${CallUUID});
+	Set(CDR(uuid)=${CallUUID});
+	Dial(SIP/to-Peter/${EXTEN},${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+	&dialstatus();
+	};
+ _55615XXX => {			//Peter spy
+	Dial(SIP/to-Peter/${EXTEN},${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+	&dialstatus();
+	};
+ _16XXX => {			//Moldova
+	&special-record();
+	Dial(SIP/${EXTEN},60,rt);
+	&dialstatus();
+	};
+ _210XX => {			//ov
+	&special-record();
+	Dial(SIP/${EXTEN},60,rt);
+	&dialstatus();
+	};
+	_08XXXX => {
+		&special-record();
+		Set(CALLERID(num)=082184);
+		Dial(SIP/externet-mitizhi/${EXTEN},${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+		&dialstatus();
+	};
+	_08XXXXX => {
+		&special-record();
+		Set(CALLERID(num)=085951);
+		Dial(SIP/externet-mitizhi/${EXTEN},${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+		&dialstatus();
+	};	
+	_X. => {
+		Answer();
+		Playback(pbx-invalid);
+		Hangup();
+	};
+};	
+
+context incoming {
+    79261533260 => {
+	&special-record();
+	Dial(SIP/11021,60,rt);
+	&dialstatus();
+	};
+};
+
+context custom-get-did-from-sip {
+    _X. => {
+	Noop(Fixing DID using information from SIP TO header);
+	Set(pseudodid=${SIP_HEADER(To)});
+	Set(pseudodid=${CUT(pseudodid,@,1)});
+	Set(pseudodid=${CUT(pseudodid,:,2)});
+	Noop(Fixing Diversion using information from SIP Diversion header);
+	Set(pseudodidD=${SIP_HEADER(Diversion)});
+	Set(pseudodidD=${CUT(pseudodidD,@,1)});
+	Set(pseudodidD=${CUT(pseudodidD,:,2)});
+	Set(pseudodidD=${pseudodidD:-10});
+	goto externet,${pseudodid},1;
+	};
+};
+
+context externet {
+
+	085979 => {				// to Chita ATS
+		&special-record();
+		Dial(SIP/0852521,60,r);
+		Dial(SIP/0852522,60,r);
+		&dialstatus();
+	};
+    _X. => {				//trap for the wrong numbers
+		Playback(pbx-invalid);
+		Hangup();
+	};
+};
+
+
+context external {
+  _08XXXX => {
+		&special-record();
+		Set(CALLERID(num)=085951);
+		Dial(SIP/externet/${EXTEN},${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+		Hangup();
+	};
+};
+
+context phones {
+
+    includes {
+		commonc;
+        incoming;
+		internal;
+        external;
+    };
+
+	_749999999983 => {
+		&special-record();
+    	Dial(SIP/74997099783/${EXTEN},${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+        Hangup();
+	}
+
+}
+
+context commonc {
+    911 => {
+	Dial(SIP/to-aster07/911,120,rt);
+	Hangup();
+    };
+//DirectPickup
+    _**XXXXX => {
+	Pickup(${EXTEN:2});
+	};
+ _[239]XXX => {					//for old ATS numbers
+		&special-record();
+		Dial(SIP/to-aster07/${EXTEN},${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+		&dialstatus();
+	};
+ _1[19]XXX => {
+		&special-record();
+    	Dial(SIP/to-aster07/${EXTEN},${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+		&dialstatus();
+	};
+ _XXXXX => {
+		&special-record();
+		Dial(SIP/${EXTEN},60,rt);
+		&dialstatus();
+	}
+
+ 082184 => {				//to Msk
+		goto ivr-office-work,s,1;
+	};	
+ 084313 => {				//to Peter panasonic
+		&special-record();
+		Dial(SIP/to-Peter/15000,${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+		&dialstatus();
+    };
+
+ *65 => {
+		NoCDR();
+		Answer();
+        Playback(zdravstujte);
+        Playback(your);
+        Playback(extension);
+        Playback(number);
+        Playback(is);
+        SayDigits(${CALLERID(number)});
+        Wait(2);
+        Hangup();
+    };
+    
+	*43 => {
+		NoCDR();
+		Answer();
+		Wait(1);
+		Playback(demo-echotest);
+		Echo();
+		Playback(demo-echodone);
+		Hangup();
+	};
+	_55615XXX => {				//Peter spy
+		Dial(SIP/to-Peter/${EXTEN},${TRUNK_RING_TIMER},${TRUNK_OPTIONS});
+		&dialstatus();
+	};
+//	; прослушка любого путем набора 555ЧЧЧЧ где ЧЧЧЧ внутренний номер
+	_556XXXXX => {
+		Answer();
+		Wait(1);
+		Authenticate(5555555);
+		Wait(1);
+		ChanSpy(sip/${EXTEN:3});
+		Hangup();
+	}
+	_X. => {
+		goto bad-number,s,1;
+	};
+};
+
+
+context call-file {		//autocall
+    s => {
+	    Answer();
+	    Wait(1);
+	    &autocall-record();
+	    Background(custom/whatmadefrom);
+	    Wait(1);
+	    Hangup();
+	    };
+}
+
+context myflwme {
+	_X. => {
+		Set(AMPUSER=${CALLERID(number)});
+		Noop(${DB(AMPUSER/${EXTEN}/followme/grplist)});
+		Set(foo=${DB(AMPUSER/${EXTEN}/followme/grplist)});
+                Set(foo1=${CUT(foo,,2)});
+		Set(foo1=${CUT(foo1,#,1)});
+		MYSQL(Connect connid localhost ${AMPDBUSER} ${AMPDBPASS} asterisk);
+                MYSQL(Query resultid ${connid} SELECT `mail` FROM `sms_account` WHERE `exten`='${EXTEN}');
+                MYSQL(Fetch fetchid ${resultid} VAR3);
+                MYSQL(Clear ${resultid});
+                MYSQL(Disconnect ${connid});
+                Dial(SIP/sipnet/${foo1},${DB(AMPUSER/${EXTEN}/followme/grptime)},tg);
+                AGI(MYAGI/mess.sh,${var3});
+                Hangup();
+	};
+	s-BUSY => {
+		Playback(goodbye);
+		Hangup();
+	};
+	s-CANCEL => {
+		AGI(MYAGI/mess.sh,${var3});
+	};
+	s-NOANSWER => {
+		Playback(goodbye);
+		Hangup();
+	};
+	s-CONGESTION => {
+		Playback(goodbye);
+		Hangup();
+	};
+	s-CHANUNAVAIL => {
+		Playback(goodbye);
+		Hangup();
+	};
+	h => {
+		goto s-${DIALSTATUS};
+		NoOp(DIALSTATUS1 = ${DIALSTATUS});
+	};
+};
+
+
+
+
+macro dialstatus() {
+	switch(${DIALSTATUS})
+		{
+		    case NOANSWER:
+						Playback(abonent&ne-otvechaet);
+						break;
+		    case BUSY:
+//                        Playback(abonent&zanjat);
+						Answer();
+						Playtones(busy);
+						Busy(10);
+						break;
+		    case CONGESTION:
+//                        Playback(abonent&zanjat);
+						Answer();
+						Playtones(congestion);
+						Congestion(10);
+						break;
+		    case CHANUNAVAIL:
+//						Answer();
+						Playtones(congestion);
+						Congestion(10);
+						break;
+		    default:
+			goto ${EXTEN},ANSWER;
+		};
+		
+		ANSWER:
+		Hangup;
+		return;
+};
+
+macro in-callerid(Number) {
+		if("${LEN(${CALLERID(num)})}"="10") { 
+		Set(CALLERID(num)=8${CALLERID(num)});
+		};
+	return;
+};
+
+macro out-callerid(Number) {
+      //NoOp(CID=${Number});
+        if(${REGEX("10[5-9][0-9]|20[01][0-9]" ${Number})}) {
+        Set(CALLERID(num)=4956413134);
+	} else {
+        Set(CALLERID(num)=4956413133);
+        };
+    return;
+};
+
+macro autocall-record() {
+	Set(FileNameToMonitor=${CALLERID(num)}-${MACRO_EXTEN}-${EPOCH});  // 2-е это экстеншен, вызвавший данный макрос 
+	MixMonitor(/var/spool/asterisk/monitor/${UNIQUEID}.wav);
+	return;
+};
+
+
+macro special-record() {
+//	Set(FileNameToMonitor=${CALLERID(num)}-${MACRO_EXTEN}-${EPOCH});  // 2-е это экстеншен, вызвавший данный макрос 
+//	MixMonitor(/var/spool/asterisk/monitor/${UNIQUEID}.wav,b);        // b - сохраняется, только если канал был соединен
+
+	Set(NOW=${EPOCH});
+	Set(__MIXMON_DIR=/var/spool/asterisk/monitor/);
+	Set(__DAY=${STRFTIME(${NOW},,%d)});
+	Set(__MONTH=${STRFTIME(${NOW},,%m)});
+	Set(__YEAR=${STRFTIME(${NOW},,%Y)});
+	Set(__TIMESTR=${YEAR}${MONTH}${DAY}-${STRFTIME(${NOW},,%H%M%S)});
+	Set(__FROMEXTEN=${CALLERID(num)});
+	Set(__CALLFILENAME=${FROMEXTEN}-${TIMESTR}-${UNIQUEID});
+	Set(MONITOR_FILENAME=${MIXMON_DIR}${YEAR}/${MONTH}/${DAY}/${CALLFILENAME});
+	Set(MIXMON_POST=nice -n 19 /usr/bin/lame -b 16  --silent "${MONITOR_FILENAME}.wav"  "${MONITOR_FILENAME}.mp3" && rm -f "${MONITOR_FILENAME}.wav"); //из wav в mp3
+	MixMonitor(${MONITOR_FILENAME}.wav,b,${MIXMON_POST});
+	Set(CDR(recordingfile)=${CALLFILENAME}.mp3);
+	return;
+}
